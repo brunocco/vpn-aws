@@ -189,7 +189,7 @@ c. Repita para criar a segunda organização (ex: `DevOps Cliente Tech`)
 a. Clique em **Add User**
 
 b. Preencha os campos:
-   - **Name**: Email do usuário (isso mesmo o e-amil ou apenas a parte antes do @)
+   - **Name**: Email do usuário (isso mesmo o email ou apenas a parte antes do @)
    - **Organization**: Selecione a organização correspondente
    - **Email**: Email do usuário
    - **PIN**: Deixe em branco (opcional)
