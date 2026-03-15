@@ -353,8 +353,8 @@ obs: Sugiro você baixar o DBeaver,configurar uma nova conexão e fazer os teste
    - **Port**: `5432`
    - **Database**: Nome do banco configurado
    - **Username**: Usuário configurado no Terraform
-   - **Password**: Senha configurada no Terraform(Consulte no console aws pelo secrets manager, pois ele estará gerenciando a senha)
-
+   - **Password**: Senha configurada no Terraform
+   
 **Exemplo de teste no VS Code usando o plugin ou pelo DBeaver:**
 
 ```sql
