@@ -386,9 +386,9 @@ Teste o acesso SSH à EC2 privada através da VPN.
 
 ```bash
 # Do seu terminal local (com VPN conectada)
-ssh -i sua-chave.pem ec2-user@<IP_PRIVADO_DA_EC2>
+ssh -i vpn-test-key.pem ec2-user@<IP_PRIVADO_DA_EC2>
 ```
-
+Obs: Essa chave foi criada junto com a EC2 com terragrunt
 Se conseguir acessar e executar comandos, a VPN está funcionando corretamente!
 
 ---
