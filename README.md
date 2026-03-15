@@ -1,4 +1,6 @@
-# Tutorial: Configuração de VPN com Pritunl na AWS
+# Projeto VPN
+
+Projeto tutorial completo de como instalar, configurar e testar uma OpenVPN na AWS usando Pritunl - desde o provisionamento da infraestrutura até os testes de conectividade.
 
 ## Índice
 
@@ -61,23 +63,31 @@ Neste tutorial, utilizaremos o **Pritunl** pelos seguintes motivos:
 Antes de iniciar, certifique-se de ter instalado e configurado:
 
 - **AWS CLI** configurada com suas credenciais (usuário e senha/access keys)
-  - Veja instruções na pasta `instalacoes-necessarias`
+  - Veja instruções na pasta `Comece por aqui/2-instalacoes-necessarias`
 - **Terraform** instalado
-  - Veja instruções na pasta `instalacoes-necessarias`
+  - Veja instruções na pasta `Comece por aqui/2-instalacoes-necessarias`
 - **Terragrunt** instalado
-  - Veja instruções na pasta `instalacoes-necessarias`
+  - Veja instruções na pasta `Comece por aqui/2-instalacoes-necessarias`
 - **Cliente Pritunl** instalado em sua máquina local
-  - Veja instruções na pasta `instalacoes-necessarias`
+  - Veja instruções na pasta `Comece por aqui/2-instalacoes-necessarias`
 
 ### Infraestrutura
 
 A infraestrutura necessária inclui:
 
-- **VPC** (`my-proj-devops-vpc-test`): Rede virtual isolada na AWS
-- **Subnets privadas**: Subredes sem acesso direto à internet (via Internet Gateway), simulando um ambiente altamente restrito e seguro
+- **VPC** (`my-proj-devops-vpc-test`): Rede virtual isolada na AWS com CIDR 10.0.0.0/16
+- **Subnets públicas** (10.0.201.0/24, 10.0.202.0/24): Subredes com acesso direto à internet via Internet Gateway, onde a EC2 VPN será provisionada para receber conexões externas
+- **Subnets privadas** (10.0.1.0/24, 10.0.2.0/24): Subredes sem acesso direto à internet, onde a EC2 App será provisionada, simulando um ambiente altamente restrito e seguro
+- **Subnets database** (10.0.101.0/24, 10.0.102.0/24): Subredes dedicadas para o RDS, isoladas e sem acesso direto à internet
 - **EC2 VPN** (`my-proj-devops-vpn-test`): Instância EC2 que funcionará como servidor VPN com Pritunl instalado via Docker
 - **EC2 App** (`my-proj-devops-app-test`): Instância Linux para testes de acesso através da VPN
 - **RDS PostgreSQL** (`my-proj-devops-rds-test`): Banco de dados para testes de conexão via VPN
+
+**Observação sobre Arquitetura:**
+
+Você pode deixar o projeto ainda mais restrito utilizando apenas subnets privadas para todos os recursos, mas nesse caso seria necessário adicionar à infraestrutura um **Network Load Balancer (NLB)** em subnet pública para receber as conexões VPN externas e encaminhá-las para a EC2 VPN em subnet privada. Adicionalmente, seria necessário um **NAT Gateway** para permitir que a EC2 VPN acesse a internet para atualizações e downloads (Docker, Pritunl, etc.).
+
+Neste projeto, optei por uma arquitetura mais simples e didática para facilitar a replicação e prática. Por isso, a EC2 VPN está em uma subnet pública com IP público, permitindo acesso direto para configuração da VPN sem a necessidade de componentes adicionais como NLB e NAT Gateway, reduzindo custos (~$32/mês de NAT Gateway + ~$18/mês de NLB) e complexidade.
 
 ---
 
@@ -88,16 +98,42 @@ Este repositório contém todos os arquivos Terraform/Terragrunt necessários pa
 Para provisionar tudo de uma vez, execute na pasta principal do projeto:
 
 ```bash
-terragrunt run-all apply --terragrunt-non-interactive
+cd my-proj-devops
+terragrunt run --all init --non-interactive
+terragrunt run --all apply --non-interactive
 ```
+### Nota Importante: Remote State Backend
 
+Em algumas versões do Terragrunt, você precisará criar manualmente o bucket S3 e a tabela DynamoDB para o remote state antes de executar os comandos `terragrunt run --all`. Verifique sua versão caso apresente erros relacionados a bucket ou DynamoDB não encontrados.
+
+#### Criar Bucket S3 para Remote State
+
+```bash
+# Substitua <SEU_NOME_UNICO> por um nome único globalmente
+aws s3 mb s3://my-proj-devops-terraform-state-<SEU_NOME_UNICO> --region us-east-1
+
+# Habilitar versionamento (recomendado)
+aws s3api put-bucket-versioning \
+    --bucket my-proj-devops-terraform-state-<SEU_NOME_UNICO> \
+    --versioning-configuration Status=Enabled
+```
+### Criar Tabela DynamoDB para State Lock
+
+```bash
+aws dynamodb create-table \
+    --table-name my-proj-devops-terraform-locks \
+    --attribute-definitions AttributeName=LockID,AttributeType=S \
+    --key-schema AttributeName=LockID,KeyType=HASH \
+    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+    --region us-east-1
+```
 ### Nota Importante sobre o User Data
 
 Dentro do **user data** da EC2 `my-proj-devops-vpn-test` está configurada a instalação automática de:
 - Docker
 - Pritunl (rodando em container Docker na porta 1194)
 
-Você pode verificar o código completo do user data na pasta da EC2.
+Você pode verificar o código completo do user data na pasta da `my-proj-devops/ec2/vpn`.
 
 ### Instalação Manual (caso necessário)
 
@@ -106,7 +142,7 @@ Se você provisionou a EC2 anteriormente sem o user data configurado, siga estes
 1. Acesse a máquina via **SSM (Systems Manager)**
 2. Instale Docker e Pritunl manualmente via linha de comando
 3. Consulte a [documentação oficial do Pritunl](https://docs.pritunl.com/docs/installation) para obter os comandos específicos de acordo com o sistema operacional da EC2 (Amazon Linux 2, Ubuntu, etc.)
-4. Após a instalação, prossiga para o **Passo 1** de configuração
+4. Após a instalação, prossiga para o **Passo 1** de configuração da VPN Pritunl.
 
 ---
 
@@ -122,7 +158,7 @@ c. Você verá a página de login do Pritunl
 
 ### 2. Resgate de Senha
 
-O usuário padrão é `pritunl`, mas a senha precisa ser resgatada do container Docker.
+O usuário padrão é `pritunl`, mas a senha precisa ser resgatada do container Docker que esta rodando dentro da nossa EC2.
 
 a. No Console AWS, pesquise por **EC2** na barra de pesquisa
 
@@ -216,6 +252,7 @@ A AWS reserva IPs específicos em cada VPC para o DNS Resolver (Route 53 Resolve
 Se sua VPC tem o range `10.0.0.0/16`, você pode usar:
 - `10.0.0.2` (IP oficial do DNS Resolver)
 - `10.0.0.1` (também funciona, pois a AWS redireciona para o DNS)
+Obs: você pode verificar o range de sua vpc no console, pagina da sua vpc em "cidr ipv4".
 
 Exemplo de configuração:
 ```
@@ -264,9 +301,10 @@ d. Serão exibidos vários links. **Copie o penúltimo link** (Profile Link)
 
 e. Envie este link ao usuário autorizado
 
-f. O usuário deve acessar o link e fazer o download do arquivo `.ovpn`
+f. O usuário deve acessar o link e usar a URL para importar o perfil no cliente Printunl ou fazer o download do arquivo `.ovpn`,
+você pode baixar pelo 2º link(zip profie) após clicar na corrente ao lado do email do usuario e enviar para o usuario.
 
-**Para testes:** Baixe o perfil de um usuário para testar a conexão localmente.
+**Para testes:** Baixe o perfil de um usuário `.ovpn` para testar a conexão localmente pelo 2 link(zip profile)
 
 ---
 
@@ -310,13 +348,14 @@ Com a VPN conectada, você pode acessar o banco de dados RDS diretamente do seu 
    - Copie o endpoint (ex: `my-proj-devops-rds-test.xxxxxx.us-east-1.rds.amazonaws.com`)
 
 2. Configure a conexão no seu cliente PostgreSQL (ex: extensão PostgreSQL do VS Code, DBeaver, pgAdmin):
+obs: Sugiro você baixar o DBeaver,configurar uma nova conexão e fazer os testes(muito mais simples)
    - **Host**: Endpoint do RDS
    - **Port**: `5432`
    - **Database**: Nome do banco configurado
    - **Username**: Usuário configurado no Terraform
-   - **Password**: Senha configurada no Terraform
+   - **Password**: Senha configurada no Terraform(Consulte no console aws pelo secrets manager, pois ele estará gerenciando a senha)
 
-**Exemplo de teste no VS Code:**
+**Exemplo de teste no VS Code usando o plugin ou pelo DBeaver:**
 
 ```sql
 -- Criar uma tabela de teste
@@ -342,28 +381,8 @@ Se a consulta funcionar, a conexão via VPN está operacional!
 
 Teste o acesso SSH à EC2 privada através da VPN.
 
-**Opção 1 - Via SSM (Systems Manager):**
 
-1. No Console AWS, acesse a EC2 `my-proj-devops-app-test`
-2. Clique em **Connect** → **Session Manager**
-3. Execute comandos para testar:
-
-```bash
-# Atualizar pacotes
-sudo yum update -y
-
-# Instalar nginx como teste
-sudo yum install nginx -y
-
-# Verificar status
-sudo systemctl status nginx
-
-# Criar arquivo de teste
-echo "VPN funcionando!" > /tmp/teste-vpn.txt
-cat /tmp/teste-vpn.txt
-```
-
-**Opção 2 - Via SSH (se configurado):**
+**Via SSH (se configurado):**
 
 ```bash
 # Do seu terminal local (com VPN conectada)
@@ -414,3 +433,27 @@ Você configurou com sucesso uma VPN Pritunl na AWS! Agora pode:
 - Controlar quem tem acesso à sua infraestrutura
 
 Para mais informações, consulte a [documentação oficial do Pritunl](https://docs.pritunl.com/).
+
+---
+
+## Autor
+
+**Bruno Cesar**
+
+📧 Email: bruno_cco@hotmail.com  
+💼 LinkedIn: [bruno-cesar-704265223](https://www.linkedin.com/in/bruno-cesar-704265223)  
+🐙 Medium: [brunosherlocked](https://medium.com/@brunosherlocked)
+
+---
+
+## Contribuições
+
+Contribuições são bem-vindas! Por favor:
+
+1. Faça fork do projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+⭐ **Se este projeto foi útil, considere dar uma estrela no GitHub!**
