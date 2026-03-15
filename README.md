@@ -99,7 +99,7 @@ Para provisionar tudo de uma vez, execute na pasta principal do projeto:
 
 ```bash
 cd my-proj-devops
-terragrunt run --all init --non-interactive
+terragrunt run --all init 
 terragrunt run --all apply --non-interactive
 ```
 ### Nota Importante: Remote State Backend
