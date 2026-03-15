@@ -1,3 +1,3 @@
 locals {
-  aws_profile = "pessoal"
+  aws_profile = "SeuPerfilAWS"
 }
