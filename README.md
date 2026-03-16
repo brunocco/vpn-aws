@@ -29,6 +29,12 @@ Projeto tutorial completo de como instalar, configurar e testar uma OpenVPN na A
 
 ---
 
+## Diagrama de Fluxo do Projeto
+
+![Diagrama de fluxo do projeto VPN](img/Diagrama.png)
+
+---
+
 ## O que é uma VPN?
 
 VPN (Virtual Private Network) é uma tecnologia que cria uma conexão segura e criptografada entre seu dispositivo e uma rede privada através da internet pública. Ela funciona como um túnel protegido que permite acessar recursos de rede de forma segura, mesmo estando remotamente.
